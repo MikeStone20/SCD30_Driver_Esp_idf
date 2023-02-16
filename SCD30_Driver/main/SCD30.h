@@ -6,7 +6,7 @@
 
 // SCD30 Address Bus
 
-#define SCD30_SENSOR_ADDR 0x61
+const uint8_t SCD30_SENSOR_ADDR = 0x61;
 
 // SCD30 Commands
 
@@ -76,7 +76,7 @@ esp_err_t toggle_asc(uint16_t flag);
 
    Returns asc flags status, or -1 on fail.
 */
-int8_t get_asc_status(void);
+int16_t get_asc_status(void);
 
 /*
    Calibrate SCD30 to compensate for reference C02 in system.
