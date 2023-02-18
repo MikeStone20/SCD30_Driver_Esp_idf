@@ -25,22 +25,18 @@ static void generate_checksums(){
 			}
 		}
 		checksums[i] = currByte;
-
 	}
 }
 
 static uint8_t get_checksums(uint16_t data){
-
 	if (checksums[1] == 0){
 		generate_checksums();
 	}
 
 	uint8_t msb = data >> 8;
 	uint8_t lsb = data & 0x00FF;
-
 	uint8_t crc = checksums[0x00FF ^ msb];
 	crc = checksums[crc ^ lsb];
-
 	return crc;
 }
 
@@ -138,7 +134,6 @@ void read_measuremeants(float* data){
 	}
 
 	uint8_t buffer[4];
-
 	for(int i = 0; i < 17; i += 6){
 		buffer[0] = response[i];
 		buffer[1] = response[i + 1];
@@ -194,7 +189,6 @@ void read_firmware(char *buffer){
 	if(response < 0){
 		return;
 	}
-
 	uint8_t major_version = response >> 8;
 	uint8_t minor_version = response & 0x00FF;
 	sprintf(buffer, "%d.%d", major_version, minor_version);
