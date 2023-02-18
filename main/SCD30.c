@@ -1,7 +1,7 @@
 #include "SCD30.h"
 
 static int i2c_master_num = 0;
-static int timeout = 60000;
+static int timeout = 10000;
 static uint8_t checksums[256];
 
 void set_i2c_master_num(uint _i2c_master_num){
@@ -25,22 +25,18 @@ static void generate_checksums(){
 			}
 		}
 		checksums[i] = currByte;
-
 	}
 }
 
 static uint8_t get_checksums(uint16_t data){
-
 	if (checksums[1] == 0){
 		generate_checksums();
 	}
 
 	uint8_t msb = data >> 8;
 	uint8_t lsb = data & 0x00FF;
-
 	uint8_t crc = checksums[0x00FF ^ msb];
 	crc = checksums[crc ^ lsb];
-
 	return crc;
 }
 
@@ -57,6 +53,7 @@ static esp_err_t scd30_write(uint16_t command, uint16_t data){
 	buffer[3] = data & 0x00FF;
 	buffer[4] = get_checksums(data);
 	esp_err_t status = i2c_master_write_to_device(i2c_master_num, SCD30_SENSOR_ADDR, buffer, sizeof(buffer), timeout / portTICK_PERIOD_MS);
+	vTaskDelay(30 / portTICK_PERIOD_MS);
 	return status;
 }
 
@@ -65,11 +62,17 @@ static int16_t scd30_read(uint16_t command){
 	bytes[0] = command >> 8;
 	bytes[1] = command & 0x00FF;
 	esp_err_t status = i2c_master_write_to_device(i2c_master_num, SCD30_SENSOR_ADDR, bytes, sizeof(bytes), timeout / portTICK_PERIOD_MS);
-	ESP_ERROR_CHECK(status);
+	ESP_ERROR_CHECK_WITHOUT_ABORT(status);
+	if(status != ESP_OK){
+		return -1;
+	}
 
 	uint8_t response[3];
 	status = i2c_master_read_from_device(i2c_master_num, SCD30_SENSOR_ADDR, response, sizeof(response), timeout / portTICK_PERIOD_MS);
-	ESP_ERROR_CHECK(status);
+	ESP_ERROR_CHECK_WITHOUT_ABORT(status);
+	if(status != ESP_OK){
+		return -1;
+	}
 
 	if(validate_checksum(response[0], response[1], response[2])){
 		return ((uint16_t)response[0] << 8) | response[1];
@@ -119,13 +122,18 @@ void read_measuremeants(float* data){
 	bytes[1] = command & 0x00FF;
 
 	esp_err_t status = i2c_master_write_to_device(i2c_master_num, SCD30_SENSOR_ADDR, bytes, sizeof(bytes), timeout / portTICK_PERIOD_MS);
-	vTaskDelay(10 / portTICK_PERIOD_MS);
-	ESP_ERROR_CHECK(status);
+	ESP_ERROR_CHECK_WITHOUT_ABORT(status);
+	vTaskDelay(3 / portTICK_PERIOD_MS);
+	if(status != ESP_OK){
+		return;
+	}
 	status = i2c_master_read_from_device(i2c_master_num, SCD30_SENSOR_ADDR, response, sizeof(response), timeout / portTICK_PERIOD_MS);
-	ESP_ERROR_CHECK(status);
+	ESP_ERROR_CHECK_WITHOUT_ABORT(status);
+	if(status != ESP_OK){
+		return;
+	}
 
 	uint8_t buffer[4];
-
 	for(int i = 0; i < 17; i += 6){
 		buffer[0] = response[i];
 		buffer[1] = response[i + 1];
@@ -181,7 +189,6 @@ void read_firmware(char *buffer){
 	if(response < 0){
 		return;
 	}
-
 	uint8_t major_version = response >> 8;
 	uint8_t minor_version = response & 0x00FF;
 	sprintf(buffer, "%d.%d", major_version, minor_version);

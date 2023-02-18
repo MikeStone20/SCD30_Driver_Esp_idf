@@ -26,14 +26,43 @@ static esp_err_t i2c_master_init(void)
 	return i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
 }
 
+static void wait(int milli){
+	vTaskDelay(milli / portTICK_PERIOD_MS);
+}
+
 void app_main(void)
 {
+	esp_err_t esp_status;
 	ESP_ERROR_CHECK(i2c_master_init());
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
-	ESP_ERROR_CHECK(start_measurement(0));
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
-	// Read Data every 5 seconds
-	ESP_ERROR_CHECK(set_measurement(5));
+	esp_status = start_measurement(0);
+
+	int retries = 5;
+	while(esp_status != ESP_OK && retries < 0){
+		ESP_ERROR_CHECK_WITHOUT_ABORT(esp_status);
+		wait(1000);
+		esp_status = start_measurement(0);
+		--retries;
+	}
+	// Failed to start SCD30 in 5 seconds.
+	if(retries == 0){
+		return;
+	}
+
+	// Failed to set measurement interval in 5 seconds.
+	retries = 5;
+	esp_status = set_measurement(5);
+	while(esp_status != ESP_OK && retries < 0){
+		ESP_ERROR_CHECK_WITHOUT_ABORT(esp_status);
+		wait(1000);
+		esp_status = start_measurement(0);
+		--retries;
+	}
+
+	// Failed to set measurement interval.
+	if(retries == 0){
+		return;
+	}
+
 	float *scd30_buffer = (float *)malloc(3 * sizeof(float));
 	if(scd30_buffer == NULL){
 		ESP_LOGI(SYSTEM_TAG, "Failed to allocate SCD30 data buffer. Exiting");
@@ -43,44 +72,31 @@ void app_main(void)
 	scd30_buffer[0] = -1;
 	scd30_buffer[1] = -1;
 	scd30_buffer[2] = -1;
-	//Gives SCD30 chane to turn on to avoid time out error
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
 
-	// Temp offset set to 0
-	ESP_ERROR_CHECK(set_temp_offset(0));
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
+	// Setting temp offset
+	ESP_ERROR_CHECK_WITHOUT_ABORT(set_temp_offset(0));
 
-	// Altitude comp set to 0
-	ESP_ERROR_CHECK(set_altitude_compsensation(0));
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
+	// Altitude comp set to 1000m
+	ESP_ERROR_CHECK_WITHOUT_ABORT(set_altitude_compsensation(0));
 
 	// Reading config settings
 	int8_t asc_status = get_asc_status();
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
 	int16_t frc = get_frc();
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
 	int16_t temp_offset = get_temp_offset();
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
 	int16_t alt_comp = get_altitude_compensation();
-	vTaskDelay(2000/ portTICK_PERIOD_MS);
 
 	while(1){
 		int8_t status = get_status();
-		vTaskDelay(2000/ portTICK_PERIOD_MS);
-
 		if(status == 1){
 			read_measuremeants(scd30_buffer);
 			ESP_LOGI(SCD30_TAG, "Current SCD30 Readings:\nCo2:%f temp:%f RH:%f\n", scd30_buffer[0], scd30_buffer[1], scd30_buffer[2]);	
 			ESP_LOGI(SCD30_TAG, "Current SCD30 Configs:\nASC:%d FRC:%d Temp_offset:%d Alt_offset:%d\n", asc_status, frc, temp_offset, alt_comp);
-			// Total Delay is 5.5 seconds if read occurs.
-			vTaskDelay(3500 / portTICK_PERIOD_MS);
 		}else if(status == 0){
 			ESP_LOGI("SCD_READ_STATUS", "not ready.");
 		}else{
-			ESP_LOGI("SCD_READ_STATUS", "Corrupted read from get_status");
+			ESP_LOGI("SCD_READ_STATUS", "Unable to retrive SCD30 status.");
 		}
-		
-		
+		wait(5000);	
 	}
 	free(scd30_buffer);
 }
